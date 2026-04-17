@@ -1,0 +1,40 @@
+- why is multiple turns and the same failure points? 
+
+
+
+{"conversation_id": "003d61b9-9929-0d01-78c0-72d65befe630", "quality_score": 0.1, "failure_points": [{"turn": 6, "category": "repetition", "severity": 0.8, "note": "The bot repeats the same message from turn 5, indicating a failure to understand the borrower's response and adapt the conversation flow."}, {"turn": 8, "category": "context_loss", "severity": 0.7, "note": "Despite the borrower indicating they need time to think and will be contacted later, the bot asks about payment details again. It does not remember the prior responses."}, {"turn": 8, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 5, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 6, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 7, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 8, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 8, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 7, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 5, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 7, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}, {"turn": 6, "category": "repetition", "severity": 0.9, "note": "The bot gets stuck in a loop, repeating the same question about the payment date multiple times. It demonstrates a severe failure to understand the borrower's vague responses and adapt appropriately."}], "risk_flags": ["escalation_missed"], "overall_assessment": "The conversation is of extremely poor quality due to the bot getting stuck in a repetitive loop, failing to understand borrower intent, and not making any progress towards payment resolution.", "_annotator": "annotator_3", "_model": "gemini-2.0-flash"}
+
+
+
+
+- TODO:
+    1. understand the rule taxonomy what is quantitative and qualitative
+    2. correlation of annotators 
+    3. what and how do you get these parts:  what are the enums to rule , and quantitative assemssnet to severity and how do you put it in words -- should i use LLMs for these 
+    4. List all the violations 
+        - transistion state change that is backward except one 
+        - calling action at the wrong time 
+        - non classification of borrowser msgs with obvious singals 
+    5. are there trivial violations as well 
+
+** What counts as “appropriate empathy” and “severe hardship” is intentionally left to judg-
+ment.
+
+ {
+    "turn": int,
+    "rule": str,           # which spec rule was violated
+    "severity": float,     # 0-1
+    "explanation": str
+}
+
+- other wise all forward ones only 
+
+
+From settlement_explained or amount_pending, the agent may go back tointent_asked
+if the borrower’s response was classified asunclearwith low confidence. This allows the agent
+to re-ask what the borrower wants.
+
+------
+
+They disagree on ~30% of overlapping labels.
+

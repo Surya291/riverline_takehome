@@ -1,0 +1,451 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{longtable}
+\usepackage{graphicx}
+
+\geometry{margin=1in}
+\hypersetup{colorlinks=true, linkcolor=blue!60!black, urlcolor=blue!60!black}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\textit{Riverline --- Agent Specification}}
+\lhead{\textit{Confidential}}
+\cfoot{\thepage}
+
+\titleformat{\section}{\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{1em}{}
+
+\title{%
+  \vspace{-1cm}
+  \textbf{Specification: WhatsApp Debt Collection Agent} \\[0.3cm]
+  \large State Machine \& Compliance Requirements \\[0.2cm]
+  \normalsize Version 1.0 --- Internal Document
+}
+\author{Riverline Engineering}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\section{Overview}
+
+This document defines how our WhatsApp debt collection agent should behave. The agent talks to borrowers who have overdue loan payments. Its goal is to get the borrower to commit to a payment.
+
+The agent follows a \textbf{state machine} --- it starts in an initial state and moves through a fixed sequence of states based on what the borrower says, what the system does, and how much time has passed.
+
+This document covers:
+\begin{itemize}[nosep]
+  \item The states the agent can be in, and the allowed transitions between them (Sections~\ref{sec:states}--\ref{sec:transitions})
+  \item What actions the agent can take, and when (Section~\ref{sec:actions})
+  \item Timing rules (Section~\ref{sec:timing})
+  \item Rules that must never be broken (Section~\ref{sec:invariants})
+  \item Compliance requirements (Section~\ref{sec:compliance})
+  \item Rules about payment amounts (Section~\ref{sec:amounts})
+  \item Quality expectations (Section~\ref{sec:quality})
+\end{itemize}
+
+% ============================================================
+\section{States}
+\label{sec:states}
+
+The agent has \textbf{11 states} in total. Nine of these are ``progression states'' that represent forward movement through a conversation. Two are ``exit states'' where the conversation stops.
+
+\subsection{Progression States}
+
+These states are ordered --- the conversation is supposed to move forward through them, from top to bottom.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{clp{8cm}}
+\toprule
+\textbf{Order} & \textbf{State} & \textbf{What's happening} \\
+\midrule
+0 & \texttt{new} & Starting state. No message has been sent yet. \\
+1 & \texttt{message\_received} & The borrower has sent their first response. \\
+2 & \texttt{verification} & The agent is verifying the borrower's identity. \\
+3 & \texttt{intent\_asked} & The agent has asked what the borrower wants to do (settle, close, etc.). \\
+4 & \texttt{settlement\_explained} & The agent has explained the settlement or foreclosure options. \\
+5 & \texttt{amount\_pending} & The agent has asked the system for a settlement amount and is waiting for a response. \\
+6 & \texttt{amount\_sent} & The settlement amount has been sent to the borrower. \\
+7 & \texttt{date\_amount\_asked} & The agent is confirming the payment date and amount with the borrower. \\
+8 & \texttt{payment\_confirmed} & The borrower has committed to pay. This is the success state. \\
+\bottomrule
+\end{tabular}
+\caption{Progression states, in order.}
+\label{tab:states}
+\end{table}
+
+\subsection{Exit States}
+
+Once the conversation enters an exit state, it is over. The agent must not send any more messages.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{State} & \textbf{What's happening} \\
+\midrule
+\texttt{escalated} & The conversation has been handed off to a human agent. \\
+\texttt{dormant} & The borrower stopped responding and the conversation has timed out. \\
+\bottomrule
+\end{tabular}
+\caption{Exit states. No automated messages should be sent after entering these.}
+\label{tab:terminal}
+\end{table}
+
+% ============================================================
+\section{Inputs}
+\label{sec:inputs}
+
+Two types of things can trigger a state change: \textbf{borrower messages} (which get classified) and \textbf{system events}.
+
+\subsection{Borrower Classifications}
+
+Every borrower message is classified into exactly one of these categories:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lp{9cm}}
+\toprule
+\textbf{Classification} & \textbf{What it means} \\
+\midrule
+\texttt{unclear} & The borrower's intent could not be determined. \\
+\texttt{wants\_settlement} & The borrower wants to pay a reduced amount to close the loan. \\
+\texttt{wants\_closure} & The borrower wants to pay the full amount to close the loan. \\
+\texttt{refuses} & The borrower is refusing to pay. \\
+\texttt{disputes} & The borrower is disputing the debt or the amount owed. \\
+\texttt{hardship} & The borrower is reporting financial difficulty (job loss, medical emergency, etc.). \\
+\texttt{asks\_time} & The borrower is asking for more time before paying. \\
+\bottomrule
+\end{tabular}
+\caption{Borrower message classifications.}
+\end{table}
+
+Each classification also has a \textbf{confidence level}: \texttt{high}, \texttt{medium}, or \texttt{low}.
+
+\subsection{System Events}
+
+These are not borrower messages --- they come from the system:
+
+\begin{itemize}[nosep]
+  \item \texttt{timeout} --- the borrower has not responded for a long time
+  \item \texttt{payment\_received} --- a payment has been detected in the system
+  \item \texttt{zcm\_response} --- the ZCM (human supervisor) has responded with a settlement amount
+  \item \texttt{zcm\_timeout} --- the ZCM did not respond within the expected time window
+\end{itemize}
+
+% ============================================================
+\section{Transitions}
+\label{sec:transitions}
+
+This section defines which state changes are allowed and which are not.
+
+\subsection{The Normal Flow (Happy Path)}
+
+In a normal conversation, the agent moves forward one state at a time:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{llp{3cm}p{4.5cm}}
+\toprule
+\textbf{From} & \textbf{To} & \textbf{Trigger} & \textbf{What happens} \\
+\midrule
+\texttt{new} & \texttt{message\_received} & any borrower message & Agent acknowledges. \\
+\texttt{message\_received} & \texttt{verification} & any borrower message & Agent asks for identity verification. \\
+\texttt{verification} & \texttt{intent\_asked} & borrower provides correct identity details & Agent asks about payment intent. \\
+\texttt{intent\_asked} & \texttt{settlement\_explained} & \texttt{wants\_settlement} or \texttt{wants\_closure} & Agent explains options. \\
+\texttt{settlement\_explained} & \texttt{amount\_pending} & borrower responds positively & Agent requests settlement amount from system. \\
+\texttt{amount\_pending} & \texttt{amount\_sent} & \texttt{zcm\_response} & Agent sends amount to borrower. \\
+\texttt{amount\_sent} & \texttt{date\_amount\_asked} & borrower responds positively & Agent asks for payment date. \\
+\texttt{date\_amount\_asked} & \texttt{payment\_confirmed} & borrower provides a date & Agent confirms payment commitment. \\
+\bottomrule
+\end{tabular}
+\caption{The normal (happy path) flow. Note: ``borrower responds positively'' is not a formal classification --- it means the borrower's response indicates agreement or acceptance, regardless of which classification it receives.}
+\end{table}
+
+\textbf{Note on \texttt{wants\_closure}:} Both settlement and closure follow the same flow through \texttt{amount\_pending}. For closure, the ZCM returns the full TOS as the amount. The state machine does not distinguish between settlement and closure after \texttt{intent\_asked}.
+
+\subsection{Staying in the Current State}
+
+Not every borrower message triggers a forward transition. If the borrower sends a message that does not satisfy the conditions for moving forward (e.g., an \texttt{unclear} message, or an \texttt{asks\_time} message), the agent should \textbf{remain in its current state} and respond appropriately.
+
+For example:
+\begin{itemize}[nosep]
+  \item If the borrower sends an \texttt{unclear} message during \texttt{verification}, the agent should re-ask the verification question.
+  \item If the borrower sends an \texttt{asks\_time} message during \texttt{intent\_asked}, the agent should acknowledge the request and continue to guide the conversation.
+  \item If the borrower sends an off-topic message, the agent should redirect.
+\end{itemize}
+
+Staying in the current state is always valid. It does not appear in the transition matrix (Table~\ref{tab:matrix}) because it is not a state \textit{change}.
+
+\subsection{Escalation}
+
+From \textbf{any} progression state (including \texttt{payment\_confirmed}), the agent can escalate to \texttt{escalated}. This should happen when:
+
+\begin{itemize}[nosep]
+  \item The borrower \textbf{refuses to pay} (\texttt{refuses})
+  \item The borrower \textbf{disputes} the debt (\texttt{disputes})
+  \item The borrower reports \textbf{hardship} (\texttt{hardship})
+  \item The borrower's message contains escalation trigger keywords (see Section~\ref{sec:compliance})
+\end{itemize}
+
+\subsection{Payment Received}
+
+If a \texttt{payment\_received} system event occurs during any progression state, the conversation should transition to \texttt{payment\_confirmed}. This can happen from any state --- it means the borrower paid through another channel before the conversation finished.
+
+\subsection{Dormancy}
+
+From \textbf{any} progression state, if the borrower has not responded for 7 days, the conversation should transition to \texttt{dormant}.
+
+\subsection{ZCM Timeout}
+
+If the agent is in \texttt{amount\_pending} and the ZCM does not respond within the expected window, the conversation must escalate to \texttt{escalated}.
+
+\subsection{Allowed Backward Transition}
+
+Normally, the conversation must only move forward. There is \textbf{one exception}:
+
+From \texttt{settlement\_explained} or \texttt{amount\_pending}, the agent may go back to \texttt{intent\_asked} if the borrower's response was classified as \texttt{unclear} with low confidence. This allows the agent to re-ask what the borrower wants.
+
+\textbf{All other backward transitions are spec violations.}
+
+\subsection{Transition Matrix}
+\label{sec:matrix}
+
+This table shows every allowed state \textit{change}. Rows are the current state, columns are the target state. ``Yes'' means allowed, ``---'' means not allowed, ``*'' means allowed only under the backward transition exception above.
+
+\textbf{Self-transitions} (staying in the same state) are always allowed for progression states and are not shown in this table.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\begin{tabular}{l|ccccccccc|cc}
+\toprule
+& \rotatebox{90}{\texttt{new}} & \rotatebox{90}{\texttt{msg\_recv}} & \rotatebox{90}{\texttt{verif}} & \rotatebox{90}{\texttt{intent}} & \rotatebox{90}{\texttt{settl\_exp}} & \rotatebox{90}{\texttt{amt\_pend}} & \rotatebox{90}{\texttt{amt\_sent}} & \rotatebox{90}{\texttt{date\_amt}} & \rotatebox{90}{\texttt{pay\_conf}} & \rotatebox{90}{\texttt{escalated}} & \rotatebox{90}{\texttt{dormant}} \\
+\midrule
+\texttt{new}              & --- & Yes & --- & --- & --- & --- & --- & --- & --- & Yes & Yes \\
+\texttt{msg\_recv}        & --- & --- & Yes & --- & --- & --- & --- & --- & --- & Yes & Yes \\
+\texttt{verif}            & --- & --- & --- & Yes & --- & --- & --- & --- & --- & Yes & Yes \\
+\texttt{intent}           & --- & --- & --- & --- & Yes & --- & --- & --- & --- & Yes & Yes \\
+\texttt{settl\_exp}       & --- & --- & --- & *   & --- & Yes & --- & --- & --- & Yes & Yes \\
+\texttt{amt\_pend}        & --- & --- & --- & *   & --- & --- & Yes & --- & --- & Yes & Yes \\
+\texttt{amt\_sent}        & --- & --- & --- & --- & --- & --- & --- & Yes & --- & Yes & Yes \\
+\texttt{date\_amt}        & --- & --- & --- & --- & --- & --- & --- & --- & Yes & Yes & Yes \\
+\texttt{pay\_conf}        & --- & --- & --- & --- & --- & --- & --- & --- & --- & Yes & Yes \\
+\midrule
+\texttt{escalated}        & --- & --- & --- & --- & --- & --- & --- & --- & --- & --- & --- \\
+\texttt{dormant}          & --- & --- & --- & --- & --- & --- & --- & --- & --- & --- & --- \\
+\bottomrule
+\end{tabular}
+\caption{Transition matrix. * = only allowed when borrower intent is \texttt{unclear} with low confidence. Self-transitions (remaining in the same state) are always valid and not shown. Any progression state can also transition to \texttt{pay\_conf} on a \texttt{payment\_received} system event.}
+\label{tab:matrix}
+\end{table}
+
+% ============================================================
+\section{Actions}
+\label{sec:actions}
+
+The agent can perform five actions. Each action is only valid during specific transitions:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lp{4cm}p{6cm}}
+\toprule
+\textbf{Action} & \textbf{When it can happen} & \textbf{Rules} \\
+\midrule
+\texttt{request\_settlement\_amount} & Only during transition from \texttt{settlement\_explained} to \texttt{amount\_pending} & Sends POS, TOS, and DPD to the system to request a settlement figure. \\
+\texttt{send\_settlement\_amount} & Only during transition from \texttt{amount\_pending} to \texttt{amount\_sent} & The amount sent must be between the settlement floor and TOS (inclusive). \\
+\texttt{confirm\_payment} & Only during transition from \texttt{date\_amount\_asked} to \texttt{payment\_confirmed} & The payment date must be in the future. \\
+\texttt{escalate} & Any transition to \texttt{escalated} & No further automated messages after this. \\
+\texttt{zcm\_timeout} & Only from \texttt{amount\_pending} & Triggered when the ZCM does not respond in time. \\
+\bottomrule
+\end{tabular}
+\caption{Actions and when they are valid. Calling an action at the wrong time is a spec violation.}
+\end{table}
+
+% ============================================================
+\section{Timing Rules}
+\label{sec:timing}
+
+\subsection{Quiet Hours}
+
+\textbf{No outbound messages between 7 PM and 8 AM IST.}
+
+The agent must not initiate messages during this window. However, if the borrower sends a message during quiet hours, the agent may reply.
+
+\subsection{Follow-up Spacing}
+
+If the agent sends a message and the borrower does not reply, the agent must wait at least \textbf{4 hours} before sending another message. The agent should not bombard the borrower.
+
+\subsection{Dormancy Timeout}
+
+If the borrower has not responded for \textbf{7 days} (10,080 minutes), the conversation should be marked as dormant.
+
+% ============================================================
+\section{Rules That Must Never Be Broken (Invariants)}
+\label{sec:invariants}
+
+These are hard rules. If any of these are violated, the conversation has a serious problem.
+
+\begin{enumerate}[leftmargin=*, label=\textbf{I\arabic*.}]
+
+\item \textbf{No Going Backwards.}
+The conversation must always move forward through the progression states. The agent should never go back to an earlier state, \textbf{except} for the one allowed backward transition described in Section~\ref{sec:transitions} (re-asking intent from \texttt{settlement\_explained} or \texttt{amount\_pending} back to \texttt{intent\_asked}).
+
+\item \textbf{Exit States Are Final.}
+Once the conversation enters \texttt{escalated} or \texttt{dormant}, it is over. The agent must not send any more messages. No transitions out of exit states are allowed.
+
+\item \textbf{One State at a Time.}
+The agent is in exactly one state at any point. It cannot be in two states simultaneously.
+
+\item \textbf{Actions Must Match States.}
+Every action must happen during the correct transition. For example:
+\begin{itemize}[nosep]
+  \item \texttt{escalate} must always lead to the \texttt{escalated} state
+  \item \texttt{confirm\_payment} must always lead to the \texttt{payment\_confirmed} state
+  \item \texttt{request\_settlement\_amount} must only happen from \texttt{settlement\_explained}
+\end{itemize}
+
+\item \textbf{Every Message Gets Classified.}
+Every borrower message must be classified into exactly one of the seven categories listed in Section~\ref{sec:inputs}. If a borrower message clearly expresses an intent (e.g., ``I can't pay, I lost my job'') but gets classified as \texttt{unclear}, that is a potential misclassification.
+
+\end{enumerate}
+
+% ============================================================
+\section{Compliance Requirements}
+\label{sec:compliance}
+
+These are regulatory and ethical rules. Violations are high-severity and can result in real complaints or legal issues.
+
+\subsection{Escalation Triggers}
+
+The agent \textbf{must} escalate to a human when the borrower's message contains:
+\begin{itemize}[nosep]
+  \item Legal threats or references to regulatory bodies
+  \item Explicit requests to stop communication (``stop'', ``do not contact me'', ``leave me alone'')
+  \item Abusive or hostile language directed at the agent
+  \item Disclosure of severe financial hardship or personal crisis
+\end{itemize}
+
+Not every mention of difficulty is grounds for escalation. But clear signals of distress, legal intent, or communication refusal \textbf{must} be acted on.
+
+\subsection{Hardship Handling}
+
+When a borrower mentions financial hardship (job loss, medical emergency, family crisis):
+\begin{enumerate}[nosep]
+  \item The agent \textbf{must} acknowledge the situation with empathy.
+  \item The agent must \textbf{not} immediately push for payment in the same or next message.
+  \item If the hardship is severe, the agent should escalate to a human.
+\end{enumerate}
+
+What counts as ``appropriate empathy'' and ``severe hardship'' is intentionally left to judgment.
+
+\subsection{Do Not Contact (DNC)}
+
+If the borrower explicitly asks to stop all communication (using words like ``stop'', ``do not contact'', ``block'', ``leave me alone''), the agent must immediately escalate and \textbf{never send another message}.
+
+This is a regulatory requirement. Violating DNC is a serious compliance failure.
+
+\subsection{Language Matching}
+
+The agent must respond in the borrower's preferred language. If the borrower writes in Hindi, Hinglish, or Telugu, the agent should match. Responding in English to a Hindi-speaking borrower is a compliance failure.
+
+\subsection{No Threats}
+
+The agent must never:
+\begin{itemize}[nosep]
+  \item Threaten legal action, property seizure, or public embarrassment
+  \item Use coercive or intimidating language
+  \item Imply consequences beyond what is factually accurate
+\end{itemize}
+
+% ============================================================
+\section{Amount Validation}
+\label{sec:amounts}
+
+Three numbers matter in every conversation:
+\begin{itemize}[nosep]
+  \item \textbf{POS} (Principal Outstanding) --- the original loan amount still owed
+  \item \textbf{TOS} (Total Outstanding) --- POS plus penalties and interest. Always greater than or equal to POS.
+  \item \textbf{Settlement floor} --- the minimum amount the company will accept to settle. Always less than or equal to POS.
+\end{itemize}
+
+\subsection{Rules}
+
+\begin{enumerate}[leftmargin=*, label=\textbf{A\arabic*.}]
+
+\item \textbf{POS must always be less than or equal to TOS.} If a conversation shows POS > TOS, something is wrong with the data.
+
+\item \textbf{Settlement floor must be less than or equal to POS.}
+
+\item \textbf{Settlement amount must be between floor and TOS.} When the agent sends a settlement amount to the borrower, it must satisfy: settlement floor $\leq$ amount $\leq$ TOS.
+
+\item \textbf{If the borrower offers below the floor}, the agent should either counter with the floor amount or escalate to a human for approval. The agent must not accept it directly.
+
+\item \textbf{Amount consistency.} Once the agent quotes a settlement amount, all subsequent references to that amount within the same conversation must be consistent. The agent must not mix up POS and TOS, or quote conflicting figures. However, if a new amount is formally approved by the ZCM (e.g., during negotiation), that new amount replaces the previous one.
+
+\end{enumerate}
+
+% ============================================================
+\section{Quality Expectations}
+\label{sec:quality}
+
+These are not hard rules --- they are expectations for a good conversation. Violating them does not mean the conversation broke the spec, but it does mean the conversation quality is lower.
+
+\begin{enumerate}[leftmargin=*, label=\textbf{Q\arabic*.}]
+
+\item \textbf{Efficient Progress.}
+A good conversation reaches \texttt{payment\_confirmed} or an appropriate exit state without too many turns. Conversations that go in circles without making progress have a quality problem.
+
+\item \textbf{Accurate Classification.}
+The agent's classification of the borrower's intent should match what the borrower actually said. Repeatedly classifying clear messages as \texttt{unclear} is a sign of a classification problem.
+
+\item \textbf{Appropriate Tone.}
+The agent's tone should match the situation. Being transactional when the borrower is in distress is bad. Being aggressive with a cooperative borrower is bad. Severity depends on context.
+
+\item \textbf{Remembering Context.}
+The agent should not repeat itself, re-ask questions it already asked, or forget what was said earlier. For example, asking for identity verification after already completing it is a context loss.
+
+\item \textbf{No Repetition.}
+The agent should not send identical or near-identical messages. Repeated messages suggest the agent is stuck in a loop. Severity increases with the number of repetitions.
+
+\end{enumerate}
+
+% ============================================================
+\section{Summary}
+\label{sec:summary}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llp{6cm}}
+\toprule
+\textbf{What to check} & \textbf{Severity} & \textbf{Where to find the rules} \\
+\midrule
+Invalid state transition & High & Section~\ref{sec:transitions}, Table~\ref{tab:matrix} \\
+Invariant violation & Critical & Section~\ref{sec:invariants} \\
+Timing violation & Medium--High & Section~\ref{sec:timing} \\
+Compliance failure & Critical & Section~\ref{sec:compliance} \\
+Amount error & High & Section~\ref{sec:amounts} \\
+Quality issue & Variable & Section~\ref{sec:quality} \\
+\bottomrule
+\end{tabular}
+\caption{Summary of what to evaluate and how severe each type of issue is.}
+\end{table}
+
+\vfill
+\noindent\rule{\textwidth}{0.4pt}
+\small
+\textit{This document is confidential and intended for evaluation purposes only. Do not distribute.}
+
+\end{document}
