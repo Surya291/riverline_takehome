@@ -7,6 +7,10 @@
 
 
 
+QnA: 
+- ask if has ti be modeled by AI 
+
+
 - TODO:
     1. understand the rule taxonomy what is quantitative and qualitative
     2. correlation of annotators 
@@ -16,6 +20,9 @@
         - calling action at the wrong time 
         - non classification of borrowser msgs with obvious singals 
     5. are there trivial violations as well 
+
+
+
 
 ** What counts as “appropriate empathy” and “severe hardship” is intentionally left to judg-
 ment.

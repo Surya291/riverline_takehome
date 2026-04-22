@@ -170,6 +170,12 @@ ANN_COLORS = {
     "AN3": {"strong": "#16a34a", "light": "#86efac", "bg": "#f0fdf4", "border": "#bbf7d0"},
 }
 
+# Evaluator color: amber
+EVAL_COLOR = {"strong": "#b45309", "light": "#fcd34d", "bg": "#fffbeb", "border": "#fde68a"}
+
+# Cache so the same file is only read once per session
+_eval_cache: dict[str, dict[str, dict]] = {}
+
 
 def _render_turn_annotations(turn, ann_turn_maps):
     """Render annotation failure points for a specific turn across all annotators."""
@@ -195,6 +201,106 @@ def _render_turn_annotations(turn, ann_turn_maps):
     return "".join(parts)
 
 
+# ---------------------------------------------------------------------------
+# Evaluator helpers
+# ---------------------------------------------------------------------------
+
+def _load_eval_file(path: str) -> dict[str, dict]:
+    """Load an eval JSONL and return {conversation_id: result_dict}, cached."""
+    if path in _eval_cache:
+        return _eval_cache[path]
+    from pathlib import Path as _Path
+    data = {}
+    with open(_Path(path), encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            cid = row.get("conversation_id")
+            if cid:
+                data[cid] = row
+    _eval_cache[path] = data
+    return data
+
+
+def _build_eval_turn_map(eval_result: dict) -> dict:
+    """Split violations into {turn_int: [v, ...], 'global': [v, ...]}."""
+    out: dict = {"global": []}
+    for v in (eval_result.get("violations") or []):
+        t = v.get("turn", -1)
+        if t is None or t < 0:
+            out["global"].append(v)
+        else:
+            out.setdefault(t, []).append(v)
+    return out
+
+
+def _render_eval_turn(turn, eval_turn_map: dict) -> str:
+    """Render evaluator violations for a specific turn (per-turn column)."""
+    viols = eval_turn_map.get(turn, [])
+    if not viols:
+        return ""
+    c = EVAL_COLOR
+    parts = []
+    for v in viols:
+        rule = v.get("rule", "")
+        sev  = v.get("severity", "")
+        expl = v.get("explanation", "")
+        short_expl = (expl[:120] + "…") if len(expl) > 120 else expl
+        parts.append(
+            f"<div style='margin:3px 0;padding:4px 8px;border-left:3px solid {c['strong']};"
+            f"background:{c['bg']};border-radius:0 4px 4px 0'>"
+            f"<span style='font-size:10px;font-weight:700;color:{c['strong']}'>{_h(rule)}</span>"
+            f"<span style='font-size:10px;color:#78350f;margin-left:6px'>sev:{_h(sev)}</span>"
+            f"<div style='font-size:10px;color:#92400e;margin-top:2px;line-height:1.3' title='{_h(expl)}'>"
+            f"{_h(short_expl)}</div>"
+            f"</div>"
+        )
+    return "".join(parts)
+
+
+def _render_eval_summary(eval_result: dict, eval_turn_map: dict) -> str:
+    """Header summary block for the evaluator result."""
+    c = EVAL_COLOR
+    qs  = eval_result.get("quality_score")
+    rs  = eval_result.get("risk_score")
+    nv  = len(eval_result.get("violations") or [])
+    global_viols = eval_turn_map.get("global") or []
+
+    summary_line = (
+        f"<div style='font-size:11px;margin:3px 0;line-height:1.5'>"
+        f"<b style='color:{c['strong']}'>EVAL</b> "
+        f"quality=<b style='color:{c['strong']}'>{qs:.2f}</b>&nbsp;"
+        f"risk=<b style='color:{c['strong']}'>{rs:.2f}</b>&nbsp;"
+        f"violations={nv}"
+        f"</div>"
+    )
+
+    global_parts = []
+    for v in global_viols:
+        rule = v.get("rule", "")
+        sev  = v.get("severity", "")
+        expl = v.get("explanation", "")
+        short_expl = (expl[:140] + "…") if len(expl) > 140 else expl
+        global_parts.append(
+            f"<div style='font-size:10px;margin:2px 0;padding:2px 8px;"
+            f"border-left:2px solid {c['border']};color:#78350f;line-height:1.4'"
+            f" title='{_h(expl)}'>"
+            f"<b>{_h(rule)}</b> sev:{sev} — {_h(short_expl)}"
+            f"</div>"
+        )
+
+    global_block = (
+        (f"<div style='margin-top:4px;font-size:10px;color:#78350f;font-weight:600'>Global violations:</div>"
+         + "".join(global_parts))
+        if global_parts else ""
+    )
+    return summary_line + global_block
+
+
+# ---------------------------------------------------------------------------
+
 def _render_annotation_summary(label, ann, colors):
     """Render compact annotator summary line for header."""
     if ann is None:
@@ -218,7 +324,16 @@ def _render_annotation_summary(label, ann, colors):
     )
 
 
-def show_conversation(conversation_id: str):
+def show_conversation(conversation_id: str, eval_jsonl_file: str | None = None):
+    """Render a conversation.
+
+    Args:
+        conversation_id: ID to look up.
+        eval_jsonl_file: optional path to an eval JSONL produced by the
+                         AgentEvaluator (each line has conversation_id,
+                         quality_score, risk_score, violations). When given,
+                         a 5th per-turn column and header summary are shown.
+    """
     bundle = _ensure_bundle()
     row = bundle.get(conversation_id)
     if not row:
@@ -242,6 +357,15 @@ def show_conversation(conversation_id: str):
         ("AN3", _build_ann_turn_map(an3_r)),
     ]
 
+    # Load evaluator result if file given
+    eval_result = None
+    eval_turn_map: dict = {}
+    if eval_jsonl_file:
+        eval_data = _load_eval_file(eval_jsonl_file)
+        eval_result = eval_data.get(conversation_id)
+        if eval_result:
+            eval_turn_map = _build_eval_turn_map(eval_result)
+
     # ── Header ─────────────────────────────────────────────────────────────
     pr  = _pill(f"payment_received={outcome.get('payment_received')}", "#dcfce7", "#166534")
     cmp = _pill(f"complained={outcome.get('borrower_complained')}", "#fee2e2", "#991b1b")
@@ -254,6 +378,16 @@ def show_conversation(conversation_id: str):
         colors = ANN_COLORS[colors_key]
         ann_summary_parts.append(_render_annotation_summary(label, ann, colors))
     ann_summary_html = "".join(ann_summary_parts)
+
+    # Evaluator summary for header (only when eval provided)
+    eval_summary_html = ""
+    if eval_result:
+        eval_summary_html = (
+            f"<div style='margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb'>"
+            f"<b style='font-size:13px'>Evaluator: </b>"
+            + _render_eval_summary(eval_result, eval_turn_map)
+            + "</div>"
+        )
 
     header = f"""
     <div style='border:2px solid #d1d5db;border-radius:10px;padding:12px 16px;margin:0 0 12px 0;'>
@@ -271,6 +405,7 @@ def show_conversation(conversation_id: str):
       <div style='margin-top:6px;padding-top:6px;border-top:1px solid #e5e7eb'>
         <b style='font-size:13px'>Annotations: </b>{ann_summary_html}
       </div>
+      {eval_summary_html}
     </div>"""
     display(HTML(header))
 
@@ -361,12 +496,26 @@ def show_conversation(conversation_id: str):
             + "</div>"
         )
 
+        # --- evaluator column (only rendered when eval file was supplied)
+        eval_col = ""
+        if eval_result:
+            ev_html = _render_eval_turn(r["turn"], eval_turn_map)
+            _ec_border = EVAL_COLOR["border"]
+            _ec_bg = EVAL_COLOR["bg"]
+            eval_col = (
+                f"<div style='min-width:260px;width:260px;padding:6px 8px;"
+                f"border-left:2px solid {_ec_border};background:{_ec_bg};overflow-y:auto'>"
+                + (ev_html if ev_html else "<span style='color:#d1d5db;font-size:11px'>—</span>")
+                + "</div>"
+            )
+
         card = (
             f"<div style='display:flex;border-bottom:1px solid #e5e7eb;background:{row_bg}'>"
             f"{left}"
             f"<div style='flex:1;min-width:0'>{text_block}</div>"
             f"{right_panel}"
             f"{ann_panel}"
+            f"{eval_col}"
             f"</div>"
         )
         cards.append(card)
