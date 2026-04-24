@@ -67,5 +67,6 @@ poetry.lock
 poetry.toml
 
 # Mac/Linux OS junk
+# Prevent accidentally committing macOS Finder metadata
 .DS_Store
 Thumbs.db
