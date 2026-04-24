@@ -198,7 +198,7 @@ The screenshots shown are generated visualisations of individual conversations, 
 
 ### 5.2 Compliance failures -> complaints
 
-Section 5.2 Example
+![Section 5.2 Example](assets/violations_conv_screenshots/5_2_screenshot.png)
 
 - **Rule:** `CMP_DNC_VIOLATION`  
 **Section : §8.3 (Do Not Contact)**  
@@ -214,6 +214,7 @@ Section 5.2 Example
 ### 5.3 Amount / quality issues (high-volume)
 
 Section 5.3 Example
+![Section 5.3 Example](assets/violations_conv_screenshots/5_3_screenshot.png)
 
 - **Rule:** `AMT_SETTLEMENT_AMOUNT_OUT_OF_BOUNDS`  
 **Section : §9 A3**  
@@ -227,6 +228,7 @@ Section 5.3 Example
 **Outcome:** complaint=False, regulatory=False, intervention=False
 
 Section 5.4 Example
+![Section 5.4 Example](assets/violations_conv_screenshots/5_4_screenshot.png)
 
 - **Rule:** `QLT_REPETITIVE_RESPONSE_LOOP`  
 **Section : §10 Q5**  
