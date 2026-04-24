@@ -1,0 +1,5 @@
+outcome_flag,n_true,n_false,rate_true
+bad_outcome_any,335,365,0.4785714285714286
+complaint_flag,78,622,0.11142857142857143
+regulatory_flag,22,678,0.03142857142857143
+required_intervention,288,412,0.4114285714285714

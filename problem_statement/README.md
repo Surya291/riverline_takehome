@@ -23,7 +23,7 @@ This assignment tests the core skills: understanding agent behaviour through for
 - Use any tools you want --- LLMs, libraries, frameworks, whatever makes you effective.
 - There are no right answers for many parts of this. Your reasoning matters more than your conclusions.
 - Depth on fewer problems beats shallow coverage of everything.
-- Questions? Reach out to jayanth@riverline.ai
+- Questions? Reach out to [jayanth@riverline.ai](mailto:jayanth@riverline.ai)
 
 ## What's in the Repo
 
@@ -99,6 +99,7 @@ Note: `channel_attribution` is often `"uncertain"`. Many borrowers interact thro
 Three annotators independently labeled 200 conversations each, with 100 conversations labeled by all three. They were given the same rubric but interpreted it differently.
 
 Each annotation includes:
+
 ```json
 {
   "conversation_id": "conv_042",
@@ -164,7 +165,7 @@ The writeup is weighted heavily. Clear thinking with simple code beats complex c
 
 ## Submission
 
-Send the following to jayanth@riverline.ai:
+Send the following to [jayanth@riverline.ai](mailto:jayanth@riverline.ai):
 
 - A GitHub repo with your `eval_takehome.py`, `violations.md`, `writeup.md`, and any supporting analysis
 - A 5-minute Loom recording walking through your approach and key findings
@@ -177,3 +178,4 @@ Send the following to jayanth@riverline.ai:
 - **Domain reasoning** --- Do you understand *why* certain failures matter in debt collection?
 - **Eval design** --- Do your metrics measure something meaningful, or just something easy?
 - **Communication** --- Can you explain complex findings clearly?
+

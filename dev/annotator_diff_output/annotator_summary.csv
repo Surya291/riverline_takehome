@@ -1,0 +1,4 @@
+annotator,n_conversations,quality_mean,quality_median,quality_q1,quality_q3,failure_points_mean,failure_points_median,risk_flags_mean,distinct_categories_total,categories_per_conversation_mean
+annotator_1,200,0.3369,0.2,0.15,0.6175,7.79,7.0,3.02,14,5.175
+annotator_2,200,0.5962,0.6,0.4,0.8,2.505,3.0,1.76,13,2.0
+annotator_3,200,0.4427,0.3,0.1,0.75,4.88,5.0,1.225,14,1.85

@@ -1,0 +1,4 @@
+pair,n_overlap,mean_abs_quality_diff,median_abs_quality_diff,mean_risk_flag_jaccard,mean_category_jaccard,overall_assessment_exact_match_rate
+annotator_1__annotator_2,100,0.2549,0.22,0.4158,0.1912,0.0
+annotator_1__annotator_3,100,0.1309,0.1,0.344,0.2119,0.0
+annotator_2__annotator_3,100,0.169,0.125,0.4933,0.4483,0.0
