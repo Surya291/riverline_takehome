@@ -177,7 +177,7 @@ The screenshots shown are generated visualisations of individual conversations, 
 
 ### 5.1 State-machine/control failures -> intervention
 
-![Section 5.1 Example](../assets/violations_conv_screenshots/5_1_screenshot.png)
+![Section 5.1 Example](assets/violations_conv_screenshots/5_1_screenshot.png)
 
 - **Rule:** `TR_INVALID_STATE_TRANSITION`  
 **Section : §4.8 (Transition Matrix, Table 5)**  
