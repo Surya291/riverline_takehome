@@ -88,24 +88,24 @@ This ended up being critical for calibration — when a rule fired, I could pull
 
 ### Stage 3: Implement the evaluator in layers
 
-I built `eval_takehome.py` across six commits, each adding one category of checks:
+I built `eval_takehome.py` stepwise, each phase adding a distinct category of checks:
 
-**Commit 1 — Foundation:**  
-Set up the `RULES` registry with `spec_ref`, `severity`, `quality_weight`, `risk_weight` for all 23 rules. Built the state transition matrix from Table 5, keyword banks for hybrid rules, and the evaluator skeleton.
+**Foundation:**  
+Set up the `RULES` registry with `spec_ref`, `severity`, `quality_weight`, and `risk_weight` for all 23 rules. Built the state transition matrix from Table 5, keyword banks for hybrid rules, and established the evaluator skeleton.
 
-**Commit 2 — State machine core:**  
-Implemented transition validators (invalid edges, backward moves, exit-state finality) and classification completeness. This caught 650+ violations across 700 conversations — state machine bugs are common.
+**State machine core:**  
+Implemented transition validators (invalid edges, backward moves, exit-state finality) and classification completeness. This surfaced 650+ violations across 700 conversations — state machine bugs are common.
 
-**Commit 3 — Actions and amounts:**  
-Added function-call validators (does each action align with the right state transition?) and amount bound checks. Found 460 settlement-amount violations and 210 action-context mismatches.
+**Actions and amounts:**  
+Added function-call validators (does each action align with the correct state transition?) and amount bound checks. Found 460 settlement-amount violations and 210 action-context mismatches.
 
-**Commit 4 — Timing rules:**  
+**Timing rules:**  
 Implemented quiet hours (9pm-9am), follow-up spacing (4-hour minimum), and dormancy timeout (7 days). None of these fired on the dataset — either the agent is compliant or the data doesn't cover these edge cases.
 
-**Commit 5 — Compliance and quality (hybrid):**  
+**Compliance and quality (hybrid):**  
 Built keyword-based detectors for hardship escalation, DNC violations, threatening language, and repetition loops. Used negation guards (e.g., "not legal action" is benign) and Jaccard similarity for near-duplicate detection.
 
-**Commit 6 — Qualitative stubs and scoring:**  
+**Qualitative stubs and scoring:**  
 Registered context loss, empathy, unclear response, and escalation triggers with explanations of why they can't be done reliably. Implemented the scoring logic (explained below).
 
 ### Stage 4: Scoring design and why it matters
